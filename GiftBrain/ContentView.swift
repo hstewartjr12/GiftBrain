@@ -1,66 +1,60 @@
-//
-//  ContentView.swift
-//  GiftBrain
-//
-//  Created by Henry Stewart on 11/9/25.
-//
-
 import SwiftUI
 import SwiftData
 
 struct ContentView: View {
-    @Environment(\.modelContext) private var modelContext
-    @Query private var items: [Item]
-
     var body: some View {
         NavigationSplitView {
-            List {
-                ForEach(items) { item in
-                    NavigationLink {
-                        Text("Item at \(item.timestamp, format: Date.FormatStyle(date: .numeric, time: .standard))")
-                    } label: {
-                        Text(item.timestamp, format: Date.FormatStyle(date: .numeric, time: .standard))
-                    }
-                }
-                .onDelete(perform: deleteItems)
+            NavigationStack {
+                PeopleListView()
             }
-#if os(macOS)
-            .navigationSplitViewColumnWidth(min: 180, ideal: 200)
-#endif
-            .toolbar {
-#if os(iOS)
-                ToolbarItem(placement: .navigationBarTrailing) {
-                    EditButton()
-                }
-#endif
-                ToolbarItem {
-                    Button(action: addItem) {
-                        Label("Add Item", systemImage: "plus")
-                    }
-                }
-            }
+            .background(.thinMaterial)
         } detail: {
-            Text("Select an item")
+            ContentPlaceholder()
         }
     }
+}
 
-    private func addItem() {
-        withAnimation {
-            let newItem = Item(timestamp: Date())
-            modelContext.insert(newItem)
-        }
-    }
+private struct ContentPlaceholder: View {
+    @Environment(\.colorScheme) private var colorScheme
 
-    private func deleteItems(offsets: IndexSet) {
-        withAnimation {
-            for index in offsets {
-                modelContext.delete(items[index])
+    var body: some View {
+        ZStack {
+            LinearGradient(
+                colors: [
+                    colorScheme == .dark ? Color.black : Color.white,
+                    (colorScheme == .dark ? Color.black : Color.white).opacity(0.92)
+                ],
+                startPoint: .top,
+                endPoint: .bottom
+            )
+                .ignoresSafeArea()
+
+            VStack(spacing: 16) {
+                Image(systemName: "gift.fill")
+                    .symbolRenderingMode(.hierarchical)
+                    .font(.system(size: 64, weight: .semibold))
+                    .foregroundStyle(.secondary)
+                Text("Welcome to GiftBrain")
+                    .font(.largeTitle.weight(.semibold))
+                Text("Select a person to generate thoughtful gift ideas and a card message.")
+                    .font(.headline)
+                    .foregroundStyle(.secondary)
+                    .multilineTextAlignment(.center)
+                    .padding(.horizontal)
             }
+            .padding(24)
+            .background(.thinMaterial, in: RoundedRectangle(cornerRadius: 24, style: .continuous))
+            .overlay(
+                RoundedRectangle(cornerRadius: 24, style: .continuous)
+                    .strokeBorder(Color.primary.opacity(0.05))
+            )
+            .shadow(color: .black.opacity(0.05), radius: 10, x: 0, y: 4)
+            .padding()
         }
     }
 }
 
 #Preview {
     ContentView()
-        .modelContainer(for: Item.self, inMemory: true)
+        .modelContainer(for: Person.self, inMemory: true)
 }
