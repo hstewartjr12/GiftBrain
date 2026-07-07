@@ -208,6 +208,8 @@ struct PersonDetailView: View {
             .glassEffect()
             .shadow(radius: 1)
         }
+        .animation(.snappy, value: ideas)
+        .animation(.snappy, value: cardMessage)
     }
 
     private var isModelAvailable: Bool {

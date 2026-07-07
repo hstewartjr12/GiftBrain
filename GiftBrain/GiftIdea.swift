@@ -12,7 +12,7 @@ enum PriceBand: String, Codable, CaseIterable, Identifiable {
     }
 }
 
-struct GiftIdea: Identifiable {
+struct GiftIdea: Identifiable, Equatable {
     var id = UUID()
     var ideaTitle: String
     var description: String

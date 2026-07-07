@@ -47,7 +47,10 @@ struct FoundationAIService {
     var model: any LanguageModel = SystemLanguageModel()
 
     func checkAvailability() -> SystemLanguageModel.Availability {
-        SystemLanguageModel.default.availability
+        if let systemModel = model as? SystemLanguageModel {
+            return systemModel.availability
+        }
+        return .unavailable(.modelNotReady)
     }
 
     func generateIdeas(
