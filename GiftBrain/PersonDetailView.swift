@@ -1,4 +1,7 @@
 import SwiftUI
+#if os(iOS)
+import PhotosUI
+#endif
 
 #if canImport(FoundationModels)
 import FoundationModels
@@ -13,6 +16,10 @@ struct PersonDetailView: View {
     @State private var isLoadingCard = false
     @State private var showError = false
     @State private var errorMessage = ""
+    #if os(iOS)
+    @State private var selectedItem: PhotosPickerItem?
+    @State private var selectedPhoto: UIImage?
+    #endif
 
 #if canImport(FoundationModels)
     @State private var modelAvailability: SystemLanguageModel.Availability = .unavailable(.modelNotReady)
@@ -73,6 +80,48 @@ struct PersonDetailView: View {
                 .foregroundStyle(.secondary)
             }
 
+            #if os(iOS)
+            Section {
+                PhotosPicker(selection: $selectedItem, matching: .images) {
+                    HStack {
+                        if let selectedPhoto {
+                            Image(uiImage: selectedPhoto)
+                                .resizable()
+                                .scaledToFill()
+                                .frame(width: 44, height: 44)
+                                .clipShape(RoundedRectangle(cornerRadius: 8))
+                        } else {
+                            Image(systemName: "photo.on.rectangle")
+                                .font(.title2)
+                        }
+                        VStack(alignment: .leading) {
+                            Text(selectedPhoto == nil ? "Attach a photo" : "Photo attached")
+                                .font(.headline)
+                            Text("Optional: photo of recipient or their interests")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+                }
+                .onChange(of: selectedItem) { _, newItem in
+                    Task {
+                        if let data = try? await newItem?.loadTransferable(type: Data.self),
+                           let image = UIImage(data: data) {
+                            selectedPhoto = image
+                        }
+                    }
+                }
+                if selectedPhoto != nil {
+                    Button("Remove photo", role: .destructive) {
+                        selectedItem = nil
+                        selectedPhoto = nil
+                    }
+                }
+            } header: {
+                Text("Photo (optional)")
+            }
+            #endif
+
             if !isModelAvailable {
                 Section { availabilityView }
             }
@@ -89,7 +138,7 @@ struct PersonDetailView: View {
                                     .font(.caption)
                                     .padding(.horizontal, 8)
                                     .padding(.vertical, 4)
-                                    .background(.thinMaterial, in: Capsule())
+                                    .glassEffect(in: .capsule)
                             }
                             Text(idea.description)
                                 .foregroundStyle(.secondary)
@@ -113,6 +162,9 @@ struct PersonDetailView: View {
         }
         .formStyle(.grouped)
         .navigationTitle(person.name)
+        #if os(iOS)
+        .navigationTransition(.crossFade)
+        #endif
         .onAppear {
 #if canImport(FoundationModels)
             modelAvailability = ai.checkAvailability()
@@ -153,7 +205,7 @@ struct PersonDetailView: View {
             }
             .padding(.horizontal)
             .padding(.vertical, 10)
-            .background(.ultraThinMaterial)
+            .glassEffect()
             .shadow(radius: 1)
         }
     }
@@ -193,12 +245,7 @@ struct PersonDetailView: View {
             .foregroundStyle(tint)
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(10)
-            .background(.thinMaterial, in: RoundedRectangle(cornerRadius: 12))
-    }
-
-    private func reportError(_ error: Error, context: String) {
-        errorMessage = "\(context): \(error.localizedDescription)"
-        showError = true
+            .glassEffect(in: .rect(cornerRadius: 12))
     }
 
     @MainActor
@@ -206,6 +253,16 @@ struct PersonDetailView: View {
         defer { isLoadingIdeas = false }
 #if canImport(FoundationModels)
         do {
+            #if os(iOS)
+            ideas = try await ai.generateIdeas(
+                for: person.name,
+                notes: person.notes,
+                occasion: person.upcomingOccasion,
+                budget: person.budget,
+                giftPreference: person.giftPreference,
+                photo: selectedPhoto
+            )
+            #else
             ideas = try await ai.generateIdeas(
                 for: person.name,
                 notes: person.notes,
@@ -213,8 +270,10 @@ struct PersonDetailView: View {
                 budget: person.budget,
                 giftPreference: person.giftPreference
             )
+            #endif
         } catch {
-            reportError(error, context: "Gift ideas failed")
+            errorMessage = "Gift ideas failed: \(error.localizedDescription)"
+            showError = true
         }
 #else
         ideas = []
@@ -233,7 +292,8 @@ struct PersonDetailView: View {
                 toneHint: person.toneHint
             )
         } catch {
-            reportError(error, context: "Card message failed")
+            errorMessage = "Card message failed: \(error.localizedDescription)"
+            showError = true
         }
 #else
         cardMessage = ""

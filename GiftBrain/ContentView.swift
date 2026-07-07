@@ -47,11 +47,7 @@ private struct ContentPlaceholder: View {
                     .padding(.horizontal)
             }
             .padding(24)
-            .background(.thinMaterial, in: RoundedRectangle(cornerRadius: 24, style: .continuous))
-            .overlay(
-                RoundedRectangle(cornerRadius: 24, style: .continuous)
-                    .strokeBorder(Color.primary.opacity(0.05))
-            )
+            .glassEffect(in: .rect(cornerRadius: 24))
             .shadow(color: .black.opacity(0.05), radius: 10, x: 0, y: 4)
             .padding()
         }

@@ -1,5 +1,13 @@
 import Foundation
 
+#if canImport(UIKit)
+import UIKit
+typealias PlatformImage = UIImage
+#elseif canImport(AppKit)
+import AppKit
+typealias PlatformImage = NSImage
+#endif
+
 enum GiftTypePreference: String, Codable, CaseIterable, Identifiable {
     case physical, experience, balanced
     var id: Self { self }
@@ -36,6 +44,8 @@ struct FoundationAIService {
     - Be kind and human.
     """
 
+    var model: any LanguageModel = SystemLanguageModel()
+
     func checkAvailability() -> SystemLanguageModel.Availability {
         SystemLanguageModel.default.availability
     }
@@ -45,17 +55,44 @@ struct FoundationAIService {
         notes: String,
         occasion: String?,
         budget: PriceBand,
-        giftPreference: GiftTypePreference
+        giftPreference: GiftTypePreference,
+        photo: PlatformImage? = nil
     ) async throws -> [GiftIdea] {
-        let session = LanguageModelSession(instructions: baseInstructions)
-        let prompt = personContext(name: personName, notes: notes, occasion: occasion) + """
+        let session = LanguageModelSession(model: model, instructions: baseInstructions)
+        let context = personContext(name: personName, notes: notes, occasion: occasion)
+        let options = GenerationOptions(temperature: 0.8)
+
+        let response: LanguageModelSession.Response<GiftIdeaList>
+        #if os(iOS)
+        if let photo, let cgImage = PlatformImageHelper.cgImage(from: photo) {
+            let attachment = Attachment(cgImage)
+            response = try await session.respond(generating: GiftIdeaList.self, options: options) {
+                context
+                """
+                Budget band: \(budget.rawValue)
+                Preference: \(giftPreference.rawValue) (physical vs experience)
+                Task: Propose 3–5 concrete gift concepts. Keep each description to 1–2 sentences.
+                Also consider the attached photo of the person or their interests.
+                """
+                attachment
+            }
+        } else {
+            response = try await session.respond(to: context + """
+
+            Budget band: \(budget.rawValue)
+            Preference: \(giftPreference.rawValue) (physical vs experience)
+            Task: Propose 3–5 concrete gift concepts. Keep each description to 1–2 sentences.
+            """, generating: GiftIdeaList.self, options: options)
+        }
+        #else
+        response = try await session.respond(to: context + """
 
         Budget band: \(budget.rawValue)
         Preference: \(giftPreference.rawValue) (physical vs experience)
         Task: Propose 3–5 concrete gift concepts. Keep each description to 1–2 sentences.
-        """
-        let options = GenerationOptions(temperature: 0.8)
-        let response = try await session.respond(to: prompt, generating: GiftIdeaList.self, options: options)
+        """, generating: GiftIdeaList.self, options: options)
+        #endif
+
         return response.content.ideas.map { entry in
             GiftIdea(
                 ideaTitle: entry.ideaTitle.trimmingCharacters(in: .whitespacesAndNewlines),
@@ -71,7 +108,10 @@ struct FoundationAIService {
         occasion: String?,
         toneHint: String? = nil
     ) async throws -> String {
-        let session = LanguageModelSession(instructions: "You are a thoughtful card-writing assistant. Keep messages warm, sincere, and concise (1–2 sentences). Avoid emojis. Keep it in the user's voice but a touch warmer.")
+        let session = LanguageModelSession(
+            model: model,
+            instructions: "You are a thoughtful card-writing assistant. Keep messages warm, sincere, and concise (1–2 sentences). Avoid emojis. Keep it in the user's voice but a touch warmer."
+        )
         var prompt = personContext(name: personName, notes: notes, occasion: occasion) + """
 
         Task: Write a short card message (1–2 sentences). No quotes around the message.
@@ -91,6 +131,14 @@ struct FoundationAIService {
     }
 }
 
+#if os(iOS)
+enum PlatformImageHelper {
+    static func cgImage(from image: PlatformImage) -> CGImage? {
+        return image.cgImage
+    }
+}
+#endif
+
 #else
 
 struct FoundationAIService {
@@ -100,7 +148,8 @@ struct FoundationAIService {
         notes: String,
         occasion: String?,
         budget: PriceBand,
-        giftPreference: GiftTypePreference
+        giftPreference: GiftTypePreference,
+        photo: Any? = nil
     ) async throws -> [GiftIdea] { [] }
     func generateCardMessage(
         for personName: String,

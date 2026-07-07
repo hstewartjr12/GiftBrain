@@ -6,33 +6,23 @@ final class Person {
     var name: String
     var notes: String
     var upcomingOccasion: String?
-    var budgetBandRaw: String = PriceBand.medium.rawValue
-    var giftPreferenceRaw: String = GiftTypePreference.balanced.rawValue
+    @Attribute(.codable, originalName: "budgetBandRaw") var budget: PriceBand = PriceBand.medium
+    @Attribute(.codable, originalName: "giftPreferenceRaw") var giftPreference: GiftTypePreference = GiftTypePreference.balanced
     var toneHint: String = ""
 
     init(
         name: String,
         notes: String = "",
         upcomingOccasion: String? = nil,
-        budgetBandRaw: String = PriceBand.medium.rawValue,
-        giftPreferenceRaw: String = GiftTypePreference.balanced.rawValue,
+        budget: PriceBand = PriceBand.medium,
+        giftPreference: GiftTypePreference = GiftTypePreference.balanced,
         toneHint: String = ""
     ) {
         self.name = name
         self.notes = notes
         self.upcomingOccasion = upcomingOccasion
-        self.budgetBandRaw = budgetBandRaw
-        self.giftPreferenceRaw = giftPreferenceRaw
+        self.budget = budget
+        self.giftPreference = giftPreference
         self.toneHint = toneHint
-    }
-
-    var budget: PriceBand {
-        get { PriceBand(rawValue: budgetBandRaw) ?? .medium }
-        set { budgetBandRaw = newValue.rawValue }
-    }
-
-    var giftPreference: GiftTypePreference {
-        get { GiftTypePreference(rawValue: giftPreferenceRaw) ?? .balanced }
-        set { giftPreferenceRaw = newValue.rawValue }
     }
 }
