@@ -2,42 +2,37 @@ import SwiftUI
 import SwiftData
 
 struct PeopleListView: View {
-    // Provide expected data and environment dependencies
     @Environment(\.modelContext) private var modelContext
-
-    // Assuming `people` is provided from SwiftData; adjust the predicate/sort as needed
     @Query(sort: \Person.name) private var people: [Person]
+    @Binding var selectedPerson: Person?
 
     @State private var isPresentingAdd = false
 
     var body: some View {
-        List {
+        List(selection: $selectedPerson) {
             ForEach(people) { person in
-                NavigationLink {
-                    PersonDetailView(person: person)
-                } label: {
-                    HStack(spacing: 12) {
-                        ZStack {
-                            Circle()
-                                .fill(Color.accentColor.opacity(0.15))
-                                .frame(width: 36, height: 36)
-                            Text(String(person.name.prefix(1)).uppercased())
-                                .font(.subheadline.weight(.semibold))
-                                .foregroundStyle(.tint)
-                        }
+                HStack(spacing: 12) {
+                    ZStack {
+                        Circle()
+                            .fill(Color.accentColor.opacity(0.15))
+                            .frame(width: 36, height: 36)
+                        Text(String(person.name.prefix(1)).uppercased())
+                            .font(.subheadline.weight(.semibold))
+                            .foregroundStyle(.tint)
+                    }
 
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text(person.name)
-                                .font(.headline)
-                            if !person.notes.isEmpty {
-                                Text(person.notes)
-                                    .font(.subheadline)
-                                    .foregroundStyle(.secondary)
-                                    .lineLimit(2)
-                            }
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(person.name)
+                            .font(.headline)
+                        if !person.notes.isEmpty {
+                            Text(person.notes)
+                                .font(.subheadline)
+                                .foregroundStyle(.secondary)
+                                .lineLimit(2)
                         }
                     }
                 }
+                .tag(person)
             }
             .onDelete(perform: deletePeople)
         }
@@ -50,6 +45,7 @@ struct PeopleListView: View {
         .toolbar {
             #if os(iOS)
             ToolbarItem(placement: .topBarLeading) { EditButton() }
+            #endif
             ToolbarItem(placement: .primaryAction) {
                 Button {
                     isPresentingAdd = true
@@ -57,21 +53,13 @@ struct PeopleListView: View {
                     Label("Add Person", systemImage: "plus")
                 }
             }
-            #else
-            ToolbarItem(placement: .automatic) {
-                Button {
-                    isPresentingAdd = true
-                } label: {
-                    Label("Add Person", systemImage: "plus")
-                }
-            }
-            #endif
         }
         .sheet(isPresented: $isPresentingAdd) {
             NavigationStack {
                 AddPersonView { name, notes in
-                    let p = Person(name: name, notes: notes)
-                    modelContext.insert(p)
+                    let person = Person(name: name, notes: notes)
+                    modelContext.insert(person)
+                    selectedPerson = person
                     isPresentingAdd = false
                 } onCancel: {
                     isPresentingAdd = false
@@ -81,13 +69,22 @@ struct PeopleListView: View {
     }
 
     private func deletePeople(at offsets: IndexSet) {
-        for index in offsets { modelContext.delete(people[index]) }
-        try? modelContext.save()
+        for index in offsets {
+            let person = people[index]
+            if selectedPerson?.persistentModelID == person.persistentModelID {
+                selectedPerson = nil
+            }
+            modelContext.delete(person)
+        }
     }
 }
 
 #Preview {
-    NavigationStack {
-        PeopleListView()
+    @Previewable @State var selectedPerson: Person?
+    NavigationSplitView {
+        PeopleListView(selectedPerson: $selectedPerson)
+    } detail: {
+        Text("Select a person")
     }
+    .modelContainer(for: Person.self, inMemory: true)
 }

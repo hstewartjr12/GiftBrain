@@ -1,4 +1,10 @@
 import Foundation
+
+enum GiftTypePreference: String, Codable, CaseIterable, Identifiable {
+    case physical, experience, balanced
+    var id: Self { self }
+}
+
 #if canImport(FoundationModels)
 import FoundationModels
 
@@ -9,20 +15,16 @@ struct GiftIdeaList {
 }
 
 @Generable(description: "One gift idea")
-struct GiftIdeaEntry: Codable {
+struct GiftIdeaEntry {
     @Guide(description: "Short, punchy title for the gift idea (max 6 words)")
     var ideaTitle: String
 
     @Guide(description: "1–2 sentences explaining why this fits the person")
     var description: String
 
-    // Use a string field and map manually to our UI model
     @Guide(description: "One of: low, medium, high")
     var priceBand: String
 }
-
-enum BudgetBand: String, Codable, CaseIterable, Identifiable { case low, medium, high; var id: Self { self } }
-enum GiftTypePreference: String, Codable, CaseIterable, Identifiable { case physical, experience, balanced; var id: Self { self } }
 
 struct FoundationAIService {
     private let baseInstructions = """
@@ -38,49 +40,74 @@ struct FoundationAIService {
         SystemLanguageModel.default.availability
     }
 
-    func generateIdeas(for personName: String, notes: String, occasion: String?, budget: BudgetBand, giftPreference: GiftTypePreference, temperature: Double = 0.8) async throws -> [GiftIdea] {
+    func generateIdeas(
+        for personName: String,
+        notes: String,
+        occasion: String?,
+        budget: PriceBand,
+        giftPreference: GiftTypePreference
+    ) async throws -> [GiftIdea] {
         let session = LanguageModelSession(instructions: baseInstructions)
-        let prompt = """
-        Person: \(personName)
-        Occasion: \(occasion ?? "none specified")
-        Profile notes: \(notes)
+        let prompt = personContext(name: personName, notes: notes, occasion: occasion) + """
+
         Budget band: \(budget.rawValue)
         Preference: \(giftPreference.rawValue) (physical vs experience)
         Task: Propose 3–5 concrete gift concepts. Keep each description to 1–2 sentences.
         """
-        let options = GenerationOptions(temperature: temperature)
+        let options = GenerationOptions(temperature: 0.8)
         let response = try await session.respond(to: prompt, generating: GiftIdeaList.self, options: options)
         return response.content.ideas.map { entry in
-            GiftIdea(ideaTitle: entry.ideaTitle.trimmingCharacters(in: .whitespacesAndNewlines),
-                     description: entry.description.trimmingCharacters(in: .whitespacesAndNewlines),
-                     priceBand: GiftIdea.PriceBand(rawValue: entry.priceBand) ?? .medium)
+            GiftIdea(
+                ideaTitle: entry.ideaTitle.trimmingCharacters(in: .whitespacesAndNewlines),
+                description: entry.description.trimmingCharacters(in: .whitespacesAndNewlines),
+                priceBand: PriceBand(rawValue: entry.priceBand) ?? .medium
+            )
         }
     }
 
-    func generateCardMessage(for personName: String, notes: String, occasion: String?, toneHint: String? = nil, temperature: Double = 0.6) async throws -> String {
+    func generateCardMessage(
+        for personName: String,
+        notes: String,
+        occasion: String?,
+        toneHint: String? = nil
+    ) async throws -> String {
         let session = LanguageModelSession(instructions: "You are a thoughtful card-writing assistant. Keep messages warm, sincere, and concise (1–2 sentences). Avoid emojis. Keep it in the user's voice but a touch warmer.")
-        var prompt = """
-        Person: \(personName)
-        Occasion: \(occasion ?? "none specified")
-        Bullet-style notes: \(notes)
+        var prompt = personContext(name: personName, notes: notes, occasion: occasion) + """
+
         Task: Write a short card message (1–2 sentences). No quotes around the message.
         """
         if let toneHint, !toneHint.isEmpty { prompt += "\nTone hint: \(toneHint)" }
-        let options = GenerationOptions(temperature: temperature)
+        let options = GenerationOptions(temperature: 0.6)
         let response = try await session.respond(to: prompt, options: options)
         return response.content.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private func personContext(name: String, notes: String, occasion: String?) -> String {
+        """
+        Person: \(name)
+        Occasion: \(occasion ?? "none specified")
+        Profile notes: \(notes)
+        """
     }
 }
 
 #else
 
-enum BudgetBand: String, Codable, CaseIterable, Identifiable { case low, medium, high; var id: Self { self } }
-enum GiftTypePreference: String, Codable, CaseIterable, Identifiable { case physical, experience, balanced; var id: Self { self } }
-
 struct FoundationAIService {
     func checkAvailability() -> String { "Unavailable" }
-    func generateIdeas(for personName: String, notes: String, occasion: String?, budget: BudgetBand, giftPreference: GiftTypePreference, temperature: Double = 0.8) async throws -> [GiftIdea] { [] }
-    func generateCardMessage(for personName: String, notes: String, occasion: String?, toneHint: String? = nil, temperature: Double = 0.6) async throws -> String { "" }
+    func generateIdeas(
+        for personName: String,
+        notes: String,
+        occasion: String?,
+        budget: PriceBand,
+        giftPreference: GiftTypePreference
+    ) async throws -> [GiftIdea] { [] }
+    func generateCardMessage(
+        for personName: String,
+        notes: String,
+        occasion: String?,
+        toneHint: String? = nil
+    ) async throws -> String { "" }
 }
 
 #endif

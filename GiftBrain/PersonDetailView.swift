@@ -1,35 +1,31 @@
 import SwiftUI
-import SwiftData
 
 #if canImport(FoundationModels)
 import FoundationModels
 #endif
 
 struct PersonDetailView: View {
-    @Environment(\.modelContext) private var modelContext
     @Bindable var person: Person
 
-    @State private var budget: BudgetBand = .medium
-    @State private var giftPref: GiftTypePreference = .balanced
-    @State private var toneHint: String = ""
     @State private var ideas: [GiftIdea] = []
-    @State private var cardMessage: String = ""
+    @State private var cardMessage = ""
     @State private var isLoadingIdeas = false
     @State private var isLoadingCard = false
+    @State private var showError = false
+    @State private var errorMessage = ""
 
 #if canImport(FoundationModels)
     @State private var modelAvailability: SystemLanguageModel.Availability = .unavailable(.modelNotReady)
-#else
-    @State private var modelAvailabilityMessage: String = "Apple Intelligence not available on this device"
 #endif
 
     private let ai = FoundationAIService()
 
+    private var isAIBusy: Bool { isLoadingIdeas || isLoadingCard }
+
     var body: some View {
         Form {
             Section {
-                TextEditor(text: $person.notes)
-                    .frame(minHeight: 140)
+                ProfileNotesEditor(text: $person.notes, minHeight: 140)
             } header: {
                 Text("Profile notes")
             }
@@ -37,43 +33,35 @@ struct PersonDetailView: View {
             Section {
                 TextField(
                     "Occasion (e.g., Birthday, Christmas)",
-                    text: Binding<String>(
+                    text: Binding(
                         get: { person.upcomingOccasion ?? "" },
                         set: { person.upcomingOccasion = $0.isEmpty ? nil : $0 }
                     )
                 )
                 .textFieldStyle(.roundedBorder)
 
-                TextField("Tone hint (optional)", text: $toneHint)
+                TextField("Tone hint (optional)", text: $person.toneHint)
                     .textFieldStyle(.roundedBorder)
             } header: {
                 Text("Occasion")
             }
 
             Section {
-                VStack(alignment: .leading, spacing: 8) {
-                    Text("Budget")
-                        .font(.subheadline.weight(.semibold))
-                    Picker("Budget", selection: $budget) {
-                        ForEach(BudgetBand.allCases) { b in
-                            Text(b.rawValue.capitalized).tag(b)
-                        }
+                Picker("Budget", selection: $person.budget) {
+                    ForEach(PriceBand.allCases) { band in
+                        Text(band.rawValue.capitalized).tag(band)
                     }
-                    .pickerStyle(.segmented)
-                    .accessibilityHint("Choose a price range for gift ideas: low, medium, or high.")
                 }
+                .pickerStyle(.segmented)
+                .accessibilityHint("Choose a price range for gift ideas: low, medium, or high.")
 
-                VStack(alignment: .leading, spacing: 8) {
-                    Text("Gift preference")
-                        .font(.subheadline.weight(.semibold))
-                    Picker("Gift preference", selection: $giftPref) {
-                        ForEach(GiftTypePreference.allCases) { p in
-                            Text(p.rawValue.capitalized).tag(p)
-                        }
+                Picker("Gift preference", selection: $person.giftPreference) {
+                    ForEach(GiftTypePreference.allCases) { preference in
+                        Text(preference.rawValue.capitalized).tag(preference)
                     }
-                    .pickerStyle(.segmented)
-                    .accessibilityHint("Choose whether you prefer tangible items or experience-based gifts.")
                 }
+                .pickerStyle(.segmented)
+                .accessibilityHint("Choose whether you prefer tangible items or experience-based gifts.")
             } header: {
                 Text("Preferences")
             } footer: {
@@ -85,8 +73,8 @@ struct PersonDetailView: View {
                 .foregroundStyle(.secondary)
             }
 
-            Section {
-                availabilityView
+            if !isModelAvailable {
+                Section { availabilityView }
             }
 
             if !ideas.isEmpty {
@@ -124,15 +112,22 @@ struct PersonDetailView: View {
             }
         }
         .formStyle(.grouped)
-        .navigationTitle(Text(person.name))
+        .navigationTitle(person.name)
         .onAppear {
 #if canImport(FoundationModels)
-            modelAvailability = FoundationAIService().checkAvailability()
+            modelAvailability = ai.checkAvailability()
 #endif
+        }
+        .alert("Couldn't Generate", isPresented: $showError) {
+            Button("OK", role: .cancel) {}
+        } message: {
+            Text(errorMessage)
         }
         .safeAreaInset(edge: .bottom) {
             HStack(spacing: 12) {
                 Button {
+                    guard !isAIBusy else { return }
+                    isLoadingIdeas = true
                     Task { await generateIdeas() }
                 } label: {
                     Label("Generate Ideas", systemImage: isLoadingIdeas ? "hourglass" : "sparkles")
@@ -141,9 +136,11 @@ struct PersonDetailView: View {
                 .buttonStyle(.borderedProminent)
                 .controlSize(.large)
                 .accessibilityHint("Generate a short list of tailored gift ideas.")
-                .disabled(isLoadingIdeas || isUnavailable)
+                .disabled(isAIBusy || !isModelAvailable)
 
                 Button {
+                    guard !isAIBusy else { return }
+                    isLoadingCard = true
                     Task { await generateCard() }
                 } label: {
                     Label("Card Message", systemImage: isLoadingCard ? "hourglass" : "heart.text.square")
@@ -152,25 +149,21 @@ struct PersonDetailView: View {
                 .buttonStyle(.borderedProminent)
                 .controlSize(.large)
                 .accessibilityHint("Generate a concise card message based on the notes and occasion.")
-                .disabled(isLoadingCard || isUnavailable)
+                .disabled(isAIBusy || !isModelAvailable)
             }
             .padding(.horizontal)
             .padding(.vertical, 10)
             .background(.ultraThinMaterial)
             .shadow(radius: 1)
         }
-        .animation(.snappy, value: ideas)
-        .animation(.snappy, value: cardMessage)
     }
 
-    private var isUnavailable: Bool {
+    private var isModelAvailable: Bool {
 #if canImport(FoundationModels)
-        switch modelAvailability {
-        case .available: return false
-        default: return true
-        }
+        if case .available = modelAvailability { return true }
+        return false
 #else
-        return true
+        return false
 #endif
     }
 
@@ -194,7 +187,6 @@ struct PersonDetailView: View {
 #endif
     }
 
-    @ViewBuilder
     private func callout(_ text: String, systemImage: String, tint: Color) -> some View {
         Label(text, systemImage: systemImage)
             .font(.subheadline)
@@ -204,47 +196,47 @@ struct PersonDetailView: View {
             .background(.thinMaterial, in: RoundedRectangle(cornerRadius: 12))
     }
 
+    private func reportError(_ error: Error, context: String) {
+        errorMessage = "\(context): \(error.localizedDescription)"
+        showError = true
+    }
+
+    @MainActor
     private func generateIdeas() async {
-        isLoadingIdeas = true
         defer { isLoadingIdeas = false }
 #if canImport(FoundationModels)
         do {
-            let result = try await ai.generateIdeas(
+            ideas = try await ai.generateIdeas(
                 for: person.name,
                 notes: person.notes,
                 occasion: person.upcomingOccasion,
-                budget: budget,
-                giftPreference: giftPref
+                budget: person.budget,
+                giftPreference: person.giftPreference
             )
-            await MainActor.run { ideas = result }
         } catch {
-            await MainActor.run { ideas = [] }
-            print("Failed to generate ideas: \(error)")
+            reportError(error, context: "Gift ideas failed")
         }
 #else
-        await MainActor.run { ideas = [] }
+        ideas = []
 #endif
     }
 
+    @MainActor
     private func generateCard() async {
-        isLoadingCard = true
         defer { isLoadingCard = false }
 #if canImport(FoundationModels)
         do {
-            let text = try await ai.generateCardMessage(
+            cardMessage = try await ai.generateCardMessage(
                 for: person.name,
                 notes: person.notes,
                 occasion: person.upcomingOccasion,
-                toneHint: toneHint
+                toneHint: person.toneHint
             )
-            await MainActor.run { cardMessage = text }
         } catch {
-            await MainActor.run { cardMessage = "" }
-            print("Failed to generate card: \(error)")
+            reportError(error, context: "Card message failed")
         }
 #else
-        await MainActor.run { cardMessage = "" }
+        cardMessage = ""
 #endif
     }
 }
-

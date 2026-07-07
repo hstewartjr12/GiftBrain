@@ -2,14 +2,17 @@ import SwiftUI
 import SwiftData
 
 struct ContentView: View {
+    @State private var selectedPerson: Person?
+
     var body: some View {
         NavigationSplitView {
-            NavigationStack {
-                PeopleListView()
-            }
-            .background(.thinMaterial)
+            PeopleListView(selectedPerson: $selectedPerson)
         } detail: {
-            ContentPlaceholder()
+            if let selectedPerson {
+                PersonDetailView(person: selectedPerson)
+            } else {
+                ContentPlaceholder()
+            }
         }
     }
 }
@@ -17,17 +20,18 @@ struct ContentView: View {
 private struct ContentPlaceholder: View {
     @Environment(\.colorScheme) private var colorScheme
 
+    private var baseColor: Color {
+        colorScheme == .dark ? .black : .white
+    }
+
     var body: some View {
         ZStack {
             LinearGradient(
-                colors: [
-                    colorScheme == .dark ? Color.black : Color.white,
-                    (colorScheme == .dark ? Color.black : Color.white).opacity(0.92)
-                ],
+                colors: [baseColor, baseColor.opacity(0.92)],
                 startPoint: .top,
                 endPoint: .bottom
             )
-                .ignoresSafeArea()
+            .ignoresSafeArea()
 
             VStack(spacing: 16) {
                 Image(systemName: "gift.fill")

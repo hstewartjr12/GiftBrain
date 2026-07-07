@@ -4,8 +4,12 @@ struct AddPersonView: View {
     var onSave: (String, String) -> Void
     var onCancel: () -> Void
 
-    @State private var name: String = ""
-    @State private var notes: String = ""
+    @State private var name = ""
+    @State private var notes = ""
+
+    private var trimmedName: String {
+        name.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
 
     var body: some View {
         Form {
@@ -14,8 +18,7 @@ struct AddPersonView: View {
                     .textContentType(.name)
             }
             Section("Profile notes") {
-                TextEditor(text: $notes)
-                    .frame(minHeight: 120)
+                ProfileNotesEditor(text: $notes, minHeight: 120)
             }
         }
         .navigationTitle("New Person")
@@ -25,10 +28,12 @@ struct AddPersonView: View {
             }
             ToolbarItem(placement: .confirmationAction) {
                 Button("Save") {
-                    onSave(name.trimmingCharacters(in: .whitespacesAndNewlines),
-                           notes.trimmingCharacters(in: .whitespacesAndNewlines))
+                    onSave(
+                        trimmedName,
+                        notes.trimmingCharacters(in: .whitespacesAndNewlines)
+                    )
                 }
-                .disabled(name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                .disabled(trimmedName.isEmpty)
             }
         }
     }
